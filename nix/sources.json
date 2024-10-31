@@ -1,0 +1,26 @@
+{
+    "haskellNix": {
+        "branch": "master",
+        "description": "Alternative Haskell Infrastructure for Nixpkgs",
+        "homepage": "https://input-output-hk.github.io/haskell.nix",
+        "owner": "input-output-hk",
+        "repo": "haskell.nix",
+        "rev": "7cbe87bb6dcce5bc00f8bcbb5ad382c6dd516bea",
+        "sha256": "1w9j0xszbw1i5f4ykpa9223n38by7f6cx8q6pqbq8kcpw2b7m4fb",
+        "type": "tarball",
+        "url": "https://github.com/input-output-hk/haskell.nix/archive/7cbe87bb6dcce5bc00f8bcbb5ad382c6dd516bea.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    },
+    "nixpkgs": {
+        "branch": "nixpkgs-unstable",
+        "description": "Nix Packages collection",
+        "homepage": null,
+        "owner": "NixOS",
+        "repo": "nixpkgs",
+        "rev": "ccc0c2126893dd20963580b6478d1a10a4512185",
+        "sha256": "1sm9mgz970p5mbxh8ws5xdqkb6w46di58binb4lpjfzclbxhhx70",
+        "type": "tarball",
+        "url": "https://github.com/NixOS/nixpkgs/archive/ccc0c2126893dd20963580b6478d1a10a4512185.tar.gz",
+        "url_template": "https://github.com/<owner>/<repo>/archive/<rev>.tar.gz"
+    }
+}
