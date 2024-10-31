@@ -8,7 +8,7 @@ import Data.List (scanl')
 -- Simulation setup
 -- Parameters
 dtMax :: Double
-dtMax = 1.0 -- integration timestep, seconds
+dtMax = 0.5 -- integration timestep, seconds
 timeLimit :: Double
 timeLimit = 10000.0 -- seconds
 numTimesteps :: Int

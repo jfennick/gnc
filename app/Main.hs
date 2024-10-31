@@ -27,7 +27,7 @@ main = do
     let burntime_t = 0.85 * getBurnTime (3400000.0 - 50000.0) (engines superheavy)
     let burntime_a_t = 0.91 * getBurnTime (2200000.0 - 50000.0) (engines superheavyA)
 
-    let ctrls_1 = contiguousTimes 0 $ [up] ++ gravityTurn1 burntime  ++ [stagingDelay]
+    let ctrls_1 = contiguousTimes 0 $ [up] ++ gravityTurn1 burntime ++ [stagingDelay]
     let timeStageSep = t2 $ last ctrls_1
     let ctrls_1_bb = contiguousTimes timeStageSep [boostback, coastPhase1, landingBurn13, landingBurn3]
     let ctrls_1a = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay, boostback]
@@ -35,15 +35,15 @@ main = do
     --  let ctrls_t = ...
     --  let ctrls_a_t = ...
 
-    -- let ctrls_2 = contiguousTimes 0 $ [up] ++ gravityTurn1 burntime1 ++ [stagingDelay] ++ gravityTurn2 ++ [over12]
-    let ctrls_2 = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay] ++ gravityTurn2 ++ [over12]
+    let ctrls_2 = contiguousTimes timeStageSep $ gravityTurn2 ++ [over12] ++ [coastPhase2]
+    -- let ctrls_2 = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay] ++ gravityTurn2 ++ [over12]
 
     -- let stages = [superheavy, starship]
     -- let stages = [turbostage, superheavy_t, starship]
     let stages = [superheavyA, superheavyB, starship]
     -- let stages = [turbostage, superheavy_a_t, superheavy_b, starship]
 
-    let controls_boost1 = subdivideControls dtMax ctrls_1 -- $ take (length ctrls_1) controls -- ctrls_1
+    let controls_boost1 = subdivideControls dtMax ctrls_1
     let wetmass_starship = mass_dry starship + mass_prop starship + mass_payload starship
     let stage_boost1_init = superheavy {mass_payload = wetmass_starship}
     let results_boost1 = run stage_boost1_init controls_boost1 getInitialTelemetry
@@ -52,18 +52,33 @@ main = do
     let mass_prop_remaining = mass_prop stage_boost1_final
     putStrLn $ "mass_prop_remaining " ++ show mass_prop_remaining
 
-    let controls_boost1_bb = subdivideControls dtMax ctrls_1_bb -- $ drop (length ctrls_1) controls -- ctrls_1_bb
+    let controls_boost1_bb = subdivideControls dtMax ctrls_1_bb
     let results_boost1_bb = run stage_boost1_final {mass_payload = 0.0} controls_boost1_bb $ last telemetries_boost1
     let stage_boost1_bb_final = fst3 $ last results_boost1_bb
     let telemetries_boost1_bb = map snd3 results_boost1_bb
     let mass_prop_remaining_bb = mass_prop stage_boost1_bb_final
     putStrLn $ "mass_prop_remaining_bb " ++ show mass_prop_remaining_bb
 
-    let controls = controls_boost1 ++ controls_boost1_bb
-    let telemetries = telemetries_boost1 ++ telemetries_boost1_bb
+    let controls_upper = subdivideControls dtMax ctrls_2
+    let results_upper = run starship controls_upper $ last telemetries_boost1
+    let stage_upper_final = fst3 $ last results_upper
+    let telemetries_upper = map snd3 results_upper
+    let mass_prop_remaining_upper = mass_prop stage_upper_final
+    putStrLn $ "mass_prop_remaining_upper " ++ show mass_prop_remaining_upper
 
-    let times = map t1 controls_boost1
-    let score = scoreTelemetries False [telemetries] times [mass_prop_remaining_bb, mass_prop_remaining_bb] 1
+    let controls_boost1' = controls_boost1 ++ controls_boost1_bb
+    let telemetries_boost1' = telemetries_boost1 ++ telemetries_boost1_bb
+
+    let controls_upper' = controls_boost1 ++ controls_upper
+    let telemetries_upper' = telemetries_boost1 ++ telemetries_upper
+
+    let controls = [controls_boost1', controls_upper']
+    let telemetries = [telemetries_boost1', telemetries_upper']
+
+    let orbit = trd3 $ last results_upper
+    putStrLn $ "orbit " ++ show orbit
+    let times = map t1 controls_boost1'
+    let score = scoreTelemetries orbit telemetries times [mass_prop_remaining_bb, mass_prop_remaining_upper] 1
     putStrLn $ "score " ++ show score
 
     GUI.Canvas.main controls telemetries score

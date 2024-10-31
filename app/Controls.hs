@@ -18,7 +18,7 @@ turntime1b bt = bt / numturns1
 numturns2 :: Double
 numturns2 = 10
 turntime2 :: Double
-turntime2 = 5.0
+turntime2 = 8.0
 
 -- Simplest possible control: straight up, then straight sideways.
 up :: Control
@@ -53,14 +53,14 @@ gravityTurn2 :: [Control]
 gravityTurn2 = piecewiseTurn 0.0 (pi/4.0) (pi/2.0) numturns2 turntime2
 
 over12 :: Control
-over12 = Control {t1 = 0.0, t2 = 1000.0, force_phi = pi / 2.0, force_mag = 1.0 }
+over12 = Control {t1 = 0.0, t2 = 137.0, force_phi = pi / 2.0, force_mag = 1.0 }
 boostback :: Control
-boostback = Control {t1 = 0.0, t2 = 40.0, force_phi = - (pi / 2.0), force_mag = 13/33 } -- minus = backward
+boostback = Control {t1 = 0.0, t2 = 40.5, force_phi = - (pi / 2.0), force_mag = 13/33 } -- minus = backward
 
-coastTime1 :: Double
-coastTime1 = 170.0
 coastPhase1 :: Control
-coastPhase1 = Control {t1 = 0.0, t2 = coastTime1, force_phi = 0.0, force_mag = 0.0 }
+coastPhase1 = Control {t1 = 0.0, t2 = 180.0, force_phi = 0.0, force_mag = 0.0 }
+coastPhase2 :: Control
+coastPhase2 = Control {t1 = 0.0, t2 = 4500.0, force_phi = 0.0, force_mag = 0.0 }
 
 landingBurn13 :: Control
 landingBurn13 =  Control {t1 = 0.0, t2 = 5.0, force_phi = pi / 6.0, force_mag = 13/33 }

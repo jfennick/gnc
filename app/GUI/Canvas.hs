@@ -9,10 +9,11 @@ import Params
 import Simulation
 import Types
 import Utils (littleg, magnitude)
+import Numeric (showFFloat)
 
-main :: [Control] -> [Telemetry] -> Double -> IO ()
-main controls telemetries score = do
-    startGUI defaultConfig (setup controls telemetries score)
+main :: [[Control]] -> [[Telemetry]] -> Double -> IO ()
+main controls_all telemetries_all score = do
+    startGUI defaultConfig (setup controls_all telemetries_all score)
 
 canvasSize :: Int
 canvasSize = 270
@@ -36,28 +37,39 @@ getCanvas = UI.canvas
 canvasGrid :: Int -> Int -> UI [[Element]]
 canvasGrid rows cols = forM [1..rows] (\_r -> forM [1..cols] (\_c -> getCanvas))
 
-setup :: [Control] -> [Telemetry] -> Double -> Window -> UI ()
-setup controls telemetries score window = do
-    let xs = map (x . position) telemetries
-    let ys = map (y . position) telemetries
+plotTelems :: ([Control], [Telemetry], [UI.Canvas]) -> UI ()
+plotTelems (controls, telemetries, canvases) = do
+    let xs = map (/ 1000.0) $ map (x . position) telemetries
+    let ys = map (/ 1000.0) $ map (y . position) telemetries
     let times = map t1 controls
     let downranges = getDownranges (map getPhi telemetries) times
-    let altitudes = map getAltitude telemetries
-    let velocities = map getVelocity telemetries
+    let altitudes = map (/ 1000.0) $ map getAltitude telemetries
+    let velocities = map (/ 1000.0) $ map getVelocity telemetries
     let accelerations = map (\c -> magnitude (x c) (y c) / littleg) $ map acceleration telemetries
     let control_phis = map force_phi controls
     let dynamic_pressures = map dynamic_pressure telemetries
 
+    let canvas1 = canvases !! 0
+    let canvas2 = canvases !! 1
+    let canvas3 = canvases !! 2
+    let canvas4 = canvases !! 3
+    let canvas5 = canvases !! 4
+    let canvas6 = canvases !! 5
+    let canvas7 = canvases !! 6
+
+    plotPoints canvas1 times altitudes
+    plotPoints canvas2 times velocities
+    plotPoints canvas3 times accelerations
+    plotPoints canvas4 times control_phis
+    plotPoints canvas5 times dynamic_pressures
+    plotPoints canvas6 xs ys
+    plotPoints canvas7 downranges altitudes
+
+setup :: [[Control]] -> [[Telemetry]] -> Double -> Window -> UI ()
+setup controls_all telemetries_all score window = do
     return window # set title "Plot the things"
 
-    canvases <- canvasGrid 2 7
-    let canvas1 = head canvases !! 0
-    let canvas2 = head canvases !! 1
-    let canvas3 = head canvases !! 2
-    let canvas4 = head canvases !! 3
-    let canvas5 = head canvases !! 4
-    let canvas6 = head canvases !! 5
-    let canvas7 = head canvases !! 6
+    canvases <- canvasGrid (length controls_all) (length $ head controls_all)
 
     drawPoints <- UI.button #+ [string "Do the thing."]
     clear     <- UI.button #+ [string "Clear the canvas."]
@@ -74,31 +86,26 @@ setup controls telemetries score window = do
     on UI.click drawPoints $ const $ do
         -- canvas # UI.strokeText ("score " ++ show score) (fromIntegral canvasSize / 2 , fromIntegral canvasSize)
 
-        plotPoints canvas1 times altitudes
-        plotPoints canvas2 times velocities
-        plotPoints canvas3 times accelerations
-        plotPoints canvas4 times control_phis
-        plotPoints canvas5 times dynamic_pressures
-        plotPoints canvas6 xs ys
-        plotPoints canvas7 downranges altitudes
+        mapM_ plotTelems $ zip3 controls_all telemetries_all canvases
 
 showDouble :: Int -> Double -> [Char]
-showDouble n d = take n $ show $ d / 1000.0
+showDouble n d = showFFloat (Just n) d ""
 
 plotPoints :: UI.Canvas -> [Double] -> [Double] -> UI ()
 plotPoints canvas xs ys = do
     let (xmin, xmax) = (minimum xs, maximum xs)
     let (ymin, ymax) = (minimum ys, maximum ys)
-    let ticksX = zip [1..10] $ map (* (canvasSized / 10)) [1..10]
-    let ticksY = zip [1..10] $ map (canvasSized -) $ map (* (canvasSized / 10)) [1..10]
+    let n = 10
+    let ticksX = zip [1..n] $ map (* (canvasSized / n)) [1..n]
+    let ticksY = zip [1..n] $ map (canvasSized -) $ map (* (canvasSized / n)) [1..n]
     forM_ ticksX $ \(idx, tickX) -> do
         canvas # set' UI.fillStyle (UI.htmlColor "black")
         canvas # UI.fillRect (tickX,canvasSized * 0.95) 1 (canvasSized * 0.05)
-        canvas # UI.strokeText (showDouble 5 $ (xmax - xmin) * idx + xmin) (tickX,canvasSized * 0.95)
+        canvas # UI.strokeText (showDouble 2 $ (xmax - xmin) / n * idx + xmin) (tickX,canvasSized * 0.95)
     forM_ ticksY $ \(idx, tickY) -> do
         canvas # set' UI.fillStyle (UI.htmlColor "black")
         canvas # UI.fillRect (0,tickY) (canvasSized * 0.05) 1
-        canvas # UI.strokeText (showDouble 5 $ (ymax - ymin) * idx + ymin) (0, tickY)
+        canvas # UI.strokeText (showDouble 2 $ (ymax - ymin) / n * idx + ymin) (0, tickY)
     -- todo draw tick marks / labels
     let xs' = rescale 0 canvasSized xs
     let ys' = rescale 0 canvasSized ys
