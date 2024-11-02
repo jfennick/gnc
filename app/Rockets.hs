@@ -3,26 +3,26 @@ module Rockets where
 import Utils
 import Types
 
-getBurnTime :: Double -> [Engine] -> Double
+getBurnTime :: Floating a => a -> [Engine a] -> a
 getBurnTime mass_prop engines = time where
     dmdt' = sum $ map dmdt engines
     time = mass_prop / dmdt'
 
 -- CF6-50 Turbofan
-cf6_mass :: Double
+cf6_mass :: Floating a => a
 cf6_mass = 3960.0 -- kg
-cf6_TWR :: Double
+cf6_TWR :: Floating a => a
 cf6_TWR = 6.01 -- unitless
-cf6_SFC :: Double
+cf6_SFC :: Floating a => a
 cf6_SFC = 0.0105 -- (kg/s)/kN
-cf6_thrust :: Double
+cf6_thrust :: Floating a => a
 cf6_thrust = (cf6_mass * littleg) * cf6_TWR -- Newton
-cf6_fuel_rate :: Double
+cf6_fuel_rate :: Floating a => a
 cf6_fuel_rate = (cf6_thrust / 1000.0) * cf6_SFC
 --println!("CF6_thrust (kN) {:?}", CF6_thrust)
 --println!("CF6_thrust (Tons) {:?}", CF6_thrust / (little_g * 1000.0))
 --println!("CF6_fuel_rate (kg/s) {:?}", CF6_fuel_rate)
-turbofan_CF6 :: Engine
+turbofan_CF6 :: Floating a => Engine a
 turbofan_CF6 = Engine
     { dmdt = cf6_fuel_rate
     , velocity_exhaust = 95000.0
@@ -45,10 +45,10 @@ circlePackingNumber n = 1 + 6 * triangularNumber (n - 1)
 --println!({:?}, (1..14).iter().map(|n| circle_packing_number(n)).collect())
 
 -- Rocket / staging setup
-crossSectionalArea :: Double
+crossSectionalArea :: Floating a => a
 crossSectionalArea = pi * 4.5 * 4.5 -- m^2
 
-r2 :: Engine
+r2 :: Floating a => Engine a
 r2 = Engine
     { dmdt = 650 -- 626 == 493 + 133 ??
     , velocity_exhaust = 3200.0
@@ -56,7 +56,7 @@ r2 = Engine
     , mass = 1630.0 -- 1600?
     }
 
-r2vac :: Engine
+r2vac :: Floating a => Engine a
 r2vac = Engine
     { dmdt = 650.0
     , velocity_exhaust = 3560.0
@@ -64,7 +64,7 @@ r2vac = Engine
     , mass = 1600.0
     }
 
-superheavy :: Stage
+superheavy :: Floating a => Stage a
 superheavy = stage where
     engs = replicate 33 r2
     massprop = 3400000.0
@@ -77,10 +77,10 @@ superheavy = stage where
             , burn_time = 0.85 * burntime -- Save for boostback burn
             }
 
-starshipEngines :: [Engine]
+starshipEngines :: Floating a => [Engine a]
 starshipEngines = replicate 3 r2 ++ replicate 6 r2vac
 
-starship :: Stage
+starship :: Floating a => Stage a
 starship = stage where
     engs = starshipEngines
     massprop = 1200000.0
@@ -102,7 +102,7 @@ starship = stage where
 numFans :: Int
 numFans = circlePackingNumber 12 - circlePackingNumber 4 -- 360 = 397 - 37
 
-turbostage :: Stage
+turbostage :: Floating a => Stage a
 turbostage = stage where
     engs = replicate numFans turbofan_CF6
     massprop = 50000.0
@@ -115,7 +115,7 @@ turbostage = stage where
         , burn_time = burntime
         }
 
-superheavyTurbo :: Stage
+superheavyTurbo :: Floating a => Stage a
 superheavyTurbo = stage where
     engs = replicate numFans turbofan_CF6
     massprop = mass_prop superheavy - mass_prop turbostage
@@ -129,7 +129,7 @@ superheavyTurbo = stage where
         }
 
 -- In thrust we trust!
-superheavyA :: Stage
+superheavyA :: Floating a => Stage a
 superheavyA = stage where
     engs = replicate (33 + 25) r2
     massprop = 2200000.0
@@ -142,7 +142,7 @@ superheavyA = stage where
         , burn_time = 0.91 * burntime -- Save for boostback burn
         }
 
-superheavyB :: Stage
+superheavyB :: Floating a => Stage a
 superheavyB = stage where
     engs = replicate 30 r2
     massprop = 1200000.0
@@ -155,7 +155,7 @@ superheavyB = stage where
         , burn_time = 0.77 * burntime -- Save for boostback burn
         }
 
-superheavyATurbo :: Stage
+superheavyATurbo :: Floating a => Stage a
 superheavyATurbo = stage where
     engs = replicate (33 + 25) r2
     massprop = mass_prop superheavyA - mass_prop turbostage

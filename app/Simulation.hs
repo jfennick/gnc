@@ -6,7 +6,7 @@ import Rockets
 import Types
 import Utils
 
-getForces :: Double -> Stage -> Control -> Bool -> (Double, Double, Double, Double, Double) -> (Double, Double, Double, Double)
+getForces :: (Floating a, Ord a, RealFloat a) => a -> Stage a -> Control a -> Bool -> (a, a, a, a, a) -> (a, a, a, a)
 getForces mass_stages stage control orbit (mass_prop_remaining, pos_x, pos_y, vel_x, vel_y) = forces where
     mass_curr = mass_stages + mass_prop_remaining
     (pos_rho, pos_phi) = cart2pol pos_x pos_y
@@ -80,12 +80,12 @@ getForces mass_stages stage control orbit (mass_prop_remaining, pos_x, pos_y, ve
 
     forces = (forces_sum_x + tx, forces_sum_y + ty, forceDragMag, tmag)
 
-getAcceleration :: (Double, Double, Double, Double) -> Double -> Coords
+getAcceleration :: Floating a => (a, a, a, a) -> a -> Coords a
 getAcceleration forces mass = acc where
     (forces_sum_x, forces_sum_y, _forceDragMag, _thrust_factor) = forces
     acc = Coords {x = forces_sum_x / mass, y = forces_sum_y / mass}
 
-step :: (Stage, Telemetry, Bool) -> Control -> (Stage, Telemetry, Bool)
+step :: (Floating a, Ord a, RealFloat a) => (Stage a, Telemetry a, Bool) -> Control a -> (Stage a, Telemetry a, Bool)
 step (stage, telem, reached_orbit_before) control = (stage', telem', reached_orbit_now) where
     (stage', telem') = integrateRungeKutta4 stage control reached_orbit_before telem
 
@@ -93,7 +93,7 @@ step (stage, telem, reached_orbit_before) control = (stage', telem', reached_orb
     perihelion_nominal = 200000.0
     reached_orbit_now = perihelion > radius_earth + perihelion_nominal
 
-run :: Stage -> [Control] -> Telemetry -> [(Stage, Telemetry, Bool)]
+run :: (Floating a, Ord a, RealFloat a) => Stage a -> [Control a] -> Telemetry a -> [(Stage a, Telemetry a, Bool)]
 run stage controls telemInit = resultsShortCircuit where
     -- controls is assumed to contain disjoint contiguous time intervals (NOT necessarily uniform dt!)
     -- tstart <- getCurrentTime
@@ -105,7 +105,7 @@ run stage controls telemInit = resultsShortCircuit where
 
     -- stageTimeIntervals = getStageTimeIntervals stages
 
-integrateRungeKutta4 :: Stage -> Control -> Bool -> Telemetry -> (Stage, Telemetry)
+integrateRungeKutta4 :: (Floating a, Ord a, RealFloat a) => Stage a -> Control a -> Bool -> Telemetry a -> (Stage a, Telemetry a)
 integrateRungeKutta4 stage control reached_orbit telem = (stage', telem') where
     pos0 = position telem
     vel0 = velocity telem
@@ -203,7 +203,7 @@ integrateRungeKutta4 stage control reached_orbit telem = (stage', telem') where
     stage' = stage {mass_prop = mass_prop_remaining - prop_used}
 
 -- Orbital mechanics https://en.wikipedia.org/wiki/Vis-viva_equation
-visviva :: Coords -> Coords -> (Double, Double, Double)
+visviva :: Floating a => Coords a -> Coords a -> (a, a, a)
 visviva position velocity = (perihelion, apohelion, eccentricity_squared) where
     v2 = x velocity * x velocity + y velocity * y velocity
     mu = big_G * mass_earth
@@ -216,25 +216,25 @@ visviva position velocity = (perihelion, apohelion, eccentricity_squared) where
     perihelion = semi_major_a * (1.0 - sqrt eccentricity_squared)
     apohelion = semi_major_a * (1.0 + sqrt eccentricity_squared)
 
-phiPos :: Double -> Double
+phiPos :: (Floating a, Ord a) => a -> a
 phiPos phi = if phi >= 0.0 then phi else phi + pi
 
-getPhi :: Telemetry -> Double
+getPhi :: (Floating a, Ord a, RealFloat a) => Telemetry a -> a
 getPhi telem = phiPos $ snd $ cart2pol (x $ position telem) (y $ position telem)
 
-getAltitude :: Telemetry -> Double
+getAltitude :: Floating a => Telemetry a -> a
 getAltitude telem = alt where
     radius = magnitude (x $ position telem) (y $ position telem)
     alt = radius - radius_earth
 
-getVelocity :: Telemetry -> Double
+getVelocity :: Floating a => Telemetry a -> a
 getVelocity telem = speed where
     speed = magnitude (x $ velocity telem) (y $ velocity telem)
 
 dropLast :: [a] -> [a]
 dropLast xs = take (length xs - 1) xs
 
-scoreTelemetries :: Bool -> [[Telemetry]] -> [Double] -> [Double] -> Int -> Double
+scoreTelemetries :: (Floating a, Ord a, RealFloat a) => Bool -> [[Telemetry a]] -> [a] -> [a] -> Int -> a
 scoreTelemetries orbit_other telemetries times mass_prop_remaining i = score where
     downranges = map (\telems -> last $ getDownranges (map getPhi telems) times) telemetries
 

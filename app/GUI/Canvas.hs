@@ -11,16 +11,16 @@ import Types
 import Utils (littleg, magnitude)
 import Numeric (showFFloat)
 
-main :: [[Control]] -> [[Telemetry]] -> Double -> IO ()
+main :: (Floating a, RealFloat a) => [[Control a]] -> [[Telemetry a]] -> a -> IO ()
 main controls_all telemetries_all score = do
     startGUI defaultConfig (setup controls_all telemetries_all score)
 
 canvasSize :: Int
 canvasSize = 270
-canvasSized :: Double
+canvasSized :: Floating a => a
 canvasSized = fromIntegral canvasSize
 
-rescale :: Double -> Double -> [Double] -> [Double]
+rescale :: (Floating a, Ord a) => a -> a -> [a] -> [a]
 rescale zmin' zmax' zs = zs' where
     zmin = minimum zs
     zmax = maximum zs
@@ -37,7 +37,7 @@ getCanvas = UI.canvas
 canvasGrid :: Int -> Int -> UI [[Element]]
 canvasGrid rows cols = forM [1..rows] (\_r -> forM [1..cols] (\_c -> getCanvas))
 
-plotTelems :: ([Control], [Telemetry], [UI.Canvas]) -> UI ()
+plotTelems :: (Floating a, RealFloat a) => ([Control a], [Telemetry a], [UI.Canvas]) -> UI ()
 plotTelems (controls, telemetries, canvases) = do
     let xs = map (/ 1000.0) $ map (x . position) telemetries
     let ys = map (/ 1000.0) $ map (y . position) telemetries
@@ -65,7 +65,7 @@ plotTelems (controls, telemetries, canvases) = do
     plotPoints canvas6 xs ys
     plotPoints canvas7 downranges altitudes
 
-setup :: [[Control]] -> [[Telemetry]] -> Double -> Window -> UI ()
+setup :: (Floating a, RealFloat a) => [[Control a]] -> [[Telemetry a]] -> a -> Window -> UI ()
 setup controls_all telemetries_all score window = do
     return window # set title "Plot the things"
 
@@ -88,24 +88,26 @@ setup controls_all telemetries_all score window = do
 
         mapM_ plotTelems $ zip3 controls_all telemetries_all canvases
 
-showDouble :: Int -> Double -> [Char]
+showDouble :: (Floating a, RealFloat a) => Int -> a -> [Char]
 showDouble n d = showFFloat (Just n) d ""
 
-plotPoints :: UI.Canvas -> [Double] -> [Double] -> UI ()
+plotPoints :: (Floating a, Ord a, RealFloat a) => UI.Canvas -> [a] -> [a] -> UI ()
 plotPoints canvas xs ys = do
     let (xmin, xmax) = (minimum xs, maximum xs)
     let (ymin, ymax) = (minimum ys, maximum ys)
-    let n = 10
-    let ticksX = zip [1..n] $ map (* (canvasSized / n)) [1..n]
-    let ticksY = zip [1..n] $ map (canvasSized -) $ map (* (canvasSized / n)) [1..n]
+    let n = 10 :: Int
+    let na = fromIntegral n -- :: a
+    let nd = fromIntegral n :: Double
+    let ticksX = zip [1..n] $ map (* (canvasSized / nd)) $ map fromIntegral [1..n]
+    let ticksY = zip [1..n] $ map (canvasSized -) $ map (* (canvasSized / nd)) $ map fromIntegral [1..n]
     forM_ ticksX $ \(idx, tickX) -> do
         canvas # set' UI.fillStyle (UI.htmlColor "black")
         canvas # UI.fillRect (tickX,canvasSized * 0.95) 1 (canvasSized * 0.05)
-        canvas # UI.strokeText (showDouble 2 $ (xmax - xmin) / n * idx + xmin) (tickX,canvasSized * 0.95)
+        canvas # UI.strokeText (showDouble 2 $ (xmax - xmin) / na * (fromIntegral idx) + xmin) (tickX,canvasSized * 0.95)
     forM_ ticksY $ \(idx, tickY) -> do
         canvas # set' UI.fillStyle (UI.htmlColor "black")
         canvas # UI.fillRect (0,tickY) (canvasSized * 0.05) 1
-        canvas # UI.strokeText (showDouble 2 $ (ymax - ymin) / n * idx + ymin) (0, tickY)
+        canvas # UI.strokeText (showDouble 2 $ (ymax - ymin) / na * (fromIntegral idx) + ymin) (0, tickY)
     -- todo draw tick marks / labels
     let xs' = rescale 0 canvasSized xs
     let ys' = rescale 0 canvasSized ys
@@ -113,4 +115,4 @@ plotPoints canvas xs ys = do
     let points = zipWith (\x y -> (x, y, 1, 1, "black")) xs' ys''
     forM_ points $ \(x,y,w,h,color) -> do
         canvas # set' UI.fillStyle (UI.htmlColor color)
-        canvas # UI.fillRect (x,y) w h
+        canvas # UI.fillRect (realToFrac x, realToFrac y) w h

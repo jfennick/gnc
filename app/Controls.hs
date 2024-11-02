@@ -5,89 +5,89 @@ import Data.List (unfoldr, scanl')
 import Types
 
 -- Controls (piecewise constant, all times are in seconds)
-uptime :: Double
+uptime :: Floating a => a
 uptime = 10.0
-numturns1 :: Double
+numturns1 :: Int
 numturns1 = 10
-turntime1 :: Double -> Double
-turntime1 bt = (bt - uptime) / numturns1
-turntime1a :: Double -> Double
+turntime1 :: Floating a => a -> a
+turntime1 bt = (bt - uptime) / fromIntegral numturns1
+turntime1a :: Floating a => a -> a
 turntime1a = turntime1
-turntime1b :: Double -> Double
-turntime1b bt = bt / numturns1
-numturns2 :: Double
+turntime1b :: Floating a => a -> a
+turntime1b bt = bt / fromIntegral numturns1
+numturns2 :: Int
 numturns2 = 10
-turntime2 :: Double
+turntime2 :: Floating a => a
 turntime2 = 8.0
 
 -- Simplest possible control: straight up, then straight sideways.
-up :: Control
+up :: Floating a => Control a
 up = Control { t1 = 0.0, t2 = uptime, force_phi = 0.0, force_mag = 1.0 }
-over :: Control
+over :: Floating a => Control a
 over = Control {t1 = uptime, t2 = 1000.0, force_phi = pi / 2.0, force_mag = 1.0}
-controlsUpOver :: [Control]
+controlsUpOver :: Floating a => [Control a]
 controlsUpOver = [up, over]
 
-piecewiseTurn :: Double -> Double -> Double -> Double -> Double -> [Control]
-piecewiseTurn init_time init_angle final_angle numturns turntime = map mkTurn [0..numturns] where
+piecewiseTurn :: Floating a => a -> a -> a -> Int -> a -> [Control a]
+piecewiseTurn init_time init_angle final_angle numturns turntime = map (mkTurn . fromIntegral) [0..numturns] where
     mkTurn r = Control {
         t1 = init_time + r*turntime,
         t2 = init_time + (r+1.0)*turntime,
-        force_phi = init_angle + (final_angle - init_angle)*(r+1.0)/numturns,
+        force_phi = init_angle + (final_angle - init_angle)*(r+1.0)/ fromIntegral numturns,
         force_mag = 1.0
         }
 
-gravityTurn1 :: Double -> [Control]
+gravityTurn1 :: Floating a => a -> [Control a]
 gravityTurn1 bt = piecewiseTurn 0.0 0.0 (pi/4.0) numturns1 $ turntime1 bt
-gravityTurn1a :: Double -> [Control]
+gravityTurn1a :: Floating a => a -> [Control a]
 gravityTurn1a bt = piecewiseTurn 0.0 0.0 (pi/6.0) numturns1 $ turntime1a bt
-gravityTurn1b :: Double -> [Control]
+gravityTurn1b :: Floating a => a -> [Control a]
 gravityTurn1b bt = piecewiseTurn 0.0 (pi/6.0) (pi/4.0) numturns1 $ turntime1b bt
 
-stagingTime :: Double
+stagingTime :: Floating a => a
 stagingTime = 10.0
-stagingDelay :: Control
+stagingDelay :: Floating a => Control a
 stagingDelay = Control {t1 = 0.0, t2 = stagingTime, force_phi = 0.0, force_mag = 0.0 }
 
-gravityTurn2 :: [Control]
+gravityTurn2 :: Floating a => [Control a]
 gravityTurn2 = piecewiseTurn 0.0 (pi/4.0) (pi/2.0) numturns2 turntime2
 
-over12 :: Control
+over12 :: Floating a => Control a
 over12 = Control {t1 = 0.0, t2 = 137.0, force_phi = pi / 2.0, force_mag = 1.0 }
-boostback :: Control
+boostback :: Floating a => Control a
 boostback = Control {t1 = 0.0, t2 = 40.5, force_phi = - (pi / 2.0), force_mag = 13/33 } -- minus = backward
 
-coastPhase1 :: Control
+coastPhase1 :: Floating a => Control a
 coastPhase1 = Control {t1 = 0.0, t2 = 180.0, force_phi = 0.0, force_mag = 0.0 }
-coastPhase2 :: Control
+coastPhase2 :: Floating a => Control a
 coastPhase2 = Control {t1 = 0.0, t2 = 4500.0, force_phi = 0.0, force_mag = 0.0 }
 
-landingBurn13 :: Control
+landingBurn13 :: Floating a => Control a
 landingBurn13 =  Control {t1 = 0.0, t2 = 5.0, force_phi = pi / 6.0, force_mag = 13/33 }
-landingBurn3 :: Control
+landingBurn3 :: Floating a => Control a
 landingBurn3 =  Control {t1 = 0.0, t2 = 20.0, force_phi = 0.0, force_mag = 3/33 }
 
-contiguousTimes :: Double -> [Control] -> [Control]
+contiguousTimes :: Floating a => a -> [Control a] -> [Control a]
 contiguousTimes offset controls = controls' where
     dt c = t2 c - t1 c
     dts = map dt controls
     times = scanl' (+) offset dts
     controls' = zipWith (\c (t1', t2') -> c {t1=t1', t2=t2'}) controls $ zip times $ tail times
 
-subdivideControl :: Double -> Control -> [Control]
+subdivideControl :: (Floating a, RealFrac a) => a -> Control a -> [Control a]
 subdivideControl dtMax control = controls where
     deltat = t2 control - t1 control
     num = ceiling $ deltat / dtMax -- use ceiling so that dt < dtMax
     dt = deltat / fromIntegral num
-    times = map ((+ t1 control) . (* dt)) [0..]
+    times = map ((+ t1 control) . (* dt) . fromIntegral) [0..]
     timeIntervals = zip times $ tail times
     mkControl (t1', t2') = control {t1 = t1', t2 = t2'}
     controls = map mkControl $ take num timeIntervals
 
-subdivideControls :: Double -> [Control] -> [Control]
+subdivideControls :: (Floating a, RealFrac a) => a -> [Control a] -> [Control a]
 subdivideControls = concatMap . subdivideControl
 
-perturbControlsPhiRandom :: [Control] -> Double -> Int -> Int -> [Double] -> [Control]
+perturbControlsPhiRandom :: Floating a => [Control a] -> a -> Int -> Int -> [a] -> [Control a]
 perturbControlsPhiRandom controls scale index_min index_max rands01 = controls' where
     delta_phis = map (\r -> (r * 2.0 - 1.0) * (pi / 2.0) / scale) rands01
     mkControl idx dphi c = if index_min <= idx && idx < index_max
@@ -95,7 +95,7 @@ perturbControlsPhiRandom controls scale index_min index_max rands01 = controls' 
                             else c
     controls' = zipWith3 mkControl [0..] delta_phis controls
 
-perturbControlsDtRandom :: [Control] -> Double -> Int -> Int -> [Double] -> [Control]
+perturbControlsDtRandom :: Floating a => [Control a] -> a -> Int -> Int -> [a] -> [Control a]
 perturbControlsDtRandom controls scale index_min index_max rands01 = controls' where
     dts = zipWith (\r c -> (r * 2.0 - 1.0) * (t2 c - t1 c) / scale) rands01 controls
     mkControl idx dt c = if index_min <= idx && idx < index_max
