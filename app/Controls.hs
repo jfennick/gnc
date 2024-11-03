@@ -102,3 +102,20 @@ perturbControlsDtRandom controls scale index_min index_max rands01 = controls' w
                             then c {t2 = dt + t2 c}
                             else c
     controls' = zipWith3 mkControl [0..] dts controls
+
+toParameterVector :: (Floating a) => [Control a] -> [a]
+toParameterVector controls = concatMap (\c -> [t1 c, t2 c, force_phi c, force_mag c]) controls
+
+chunksOf :: Int -> [a] -> [[a]]
+chunksOf n xs = go xs [] where
+    go [] xss = xss
+    go xs' xss = take n xs' : go (drop n xs') xss
+
+chunksOfLens :: [Int] -> [a] -> [[a]]
+chunksOfLens ns xs = go ns xs [] where
+    go ns' [] xss = xss
+    go [] xs' xss = xss
+    go ns' xs' xss = take (head ns') xs' : go (tail ns') (drop (head ns') xs') xss
+
+fromParameterVector :: Floating a => [a] -> [Control a]
+fromParameterVector params = map (\[p1, p2, p3, p4] -> Control p1 p2 p3 p4) $ chunksOf 4 params
