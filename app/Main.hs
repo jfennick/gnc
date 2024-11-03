@@ -1,5 +1,7 @@
 module Main where
 
+import Numeric.AD
+
 import Controls
 import Params
 import Rockets
@@ -37,7 +39,7 @@ main = do
     --  let ctrls_t = ...
     --  let ctrls_a_t = ...
 
-        ctrls_2 = contiguousTimes timeStageSep $ gravityTurn2 ++ [over12] ++ [coastPhase2]
+        ctrls_2 = contiguousTimes timeStageSep $ gravityTurn2 ++ [over12] -- ++ [coastPhase2]
         -- ctrls_2 = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay] ++ gravityTurn2 ++ [over12]
 
     -- let stages = [superheavy, starship]
@@ -45,7 +47,12 @@ main = do
     let stages = [superheavyA, superheavyB, starship]
     -- let stages = [turbostage, superheavy_a_t, superheavy_b, starship]
 
-    let controlsVec = [ctrls_1, ctrls_1_bb, ctrls_2]
+    let controlsVec = [ctrls_1_bb, ctrls_2]
+        -- controlsVec = [ctrls_1, ctrls_1_bb, ctrls_2]
+        -- For some reason, the ctrls_1 gradients are all NaN, which
+        -- causes gradientDescent to immediately return []...
+        -- Moreover, including [coastPhase2] in ctrls_2 also yields []...
+        -- For now, just exclude them from optimization.
         controlsVec :: Floating a => [[Control a]]
     let controlsLengths = map length controlsVec
         controlsLengths :: [Int]
@@ -53,13 +60,22 @@ main = do
         paramsVec :: Floating a => [a]
 
     let fn paramsVec = (telemetries, orbit, score) where
-            results = runStages controlsLengths paramsVec
+            results = runStages controlsLengths paramsVec ctrls_1
             (telemetries, mass_prop_remaining, orbit) = extractData results
             times = map t1 $ subdivideControls dtMax $ ctrls_1 ++ ctrls_2
             score = scoreTelemetries orbit telemetries times mass_prop_remaining 1
+        fn' = negate . trd3 . fn
+        fn' :: (Floating a, RealFloat a) => [a] -> a
 
+    let (fx0, xgx0) = gradWith' (,) fn' paramsVec
+    putStrLn $ "fx0 " ++ show fx0
+    mapM_ print $ zip paramsVec xgx0
+
+    let gds = take 50 $ gradientDescent fn' paramsVec
+    mapM_ print gds
+    
     let controls = map (subdivideControls dtMax) [ctrls_1 ++ ctrls_1_bb, ctrls_1 ++ ctrls_2]
-    let (telemetries, orbit, score) = fn paramsVec
+    let (telemetries, orbit, score) = fn $ last gds
     putStrLn $ "orbit " ++ show orbit
     putStrLn $ "score " ++ show score
 
@@ -90,10 +106,11 @@ extractData results = tup where
     orbit = trd3 $ last results_upper
     tup = (telemetries, mass_prop_remaining, orbit)
 
-runStages :: (Floating a, RealFloat a) => [Int] -> [a] -> Results a
-runStages chunkLengths paramsVec = results where
-    [ctrls_1, ctrls_1_bb, ctrls_2] = chunksOfLens chunkLengths $ fromParameterVector paramsVec
-    
+runStages :: (Floating a, RealFloat a) => [Int] -> [a] -> [Control a] -> Results a
+runStages chunkLengths paramsVec ctrls_1 = results where
+    -- [ctrls_1, ctrls_1_bb, ctrls_2] = chunksOfLens chunkLengths $ fromParameterVector paramsVec
+    [ctrls_1_bb, ctrls_2] = chunksOfLens chunkLengths $ fromParameterVector paramsVec
+
     controls_boost1 = subdivideControls dtMax ctrls_1
     wetmass_starship = mass_dry starship + mass_prop starship + mass_payload starship
     stage_boost1_init = superheavy {mass_payload = wetmass_starship}
