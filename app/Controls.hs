@@ -1,6 +1,6 @@
 module Controls where
 
-import Data.List (unfoldr, scanl')
+import Data.List (scanl')
 
 import Types
 
@@ -54,8 +54,11 @@ gravityTurn2 = piecewiseTurn 0.0 (pi/4.0) (pi/2.0) numturns2 turntime2
 
 over12 :: Floating a => Control a
 over12 = Control {t1 = 0.0, t2 = 137.0, force_phi = pi / 2.0, force_mag = 1.0 }
-boostback :: Floating a => Control a
-boostback = Control {t1 = 0.0, t2 = 40.5, force_phi = - (pi / 2.0), force_mag = 13/33 } -- minus = backward
+boostback :: Floating a => [Control a]
+boostback = [Control {t1 = 0.0, t2 = 40.5, force_phi = - (pi / 2.0), force_mag = 13/33 }] -- minus = backward
+-- boostback = map (\c -> c {force_mag = 13/33}) $ dropLast $ piecewiseTurn 0 (- (pi/2.0)) (- (pi/2.0)) 10 (40.5 / 10)
+-- dropLast :: [a] -> [a]
+-- dropLast xs = take (length xs - 1) xs
 
 coastPhase1 :: Floating a => Control a
 coastPhase1 = Control {t1 = 0.0, t2 = 180.0, force_phi = 0.0, force_mag = 0.0 }
@@ -87,24 +90,24 @@ subdivideControl dtMax control = controls where
 subdivideControls :: (Floating a, RealFrac a) => a -> [Control a] -> [Control a]
 subdivideControls = concatMap . subdivideControl
 
-perturbControlsPhiRandom :: Floating a => [Control a] -> a -> Int -> Int -> [a] -> [Control a]
-perturbControlsPhiRandom controls scale index_min index_max rands01 = controls' where
+perturbControlsPhi :: Floating a => [Control a] -> a -> Int -> Int -> [a] -> [Control a]
+perturbControlsPhi controls scale index_min index_max rands01 = controls' where
     delta_phis = map (\r -> (r * 2.0 - 1.0) * (pi / 2.0) / scale) rands01
     mkControl idx dphi c = if index_min <= idx && idx < index_max
                             then c {force_phi = dphi + force_phi c}
                             else c
     controls' = zipWith3 mkControl [0..] delta_phis controls
 
-perturbControlsDtRandom :: Floating a => [Control a] -> a -> Int -> Int -> [a] -> [Control a]
-perturbControlsDtRandom controls scale index_min index_max rands01 = controls' where
+perturbControlsDt :: Floating a => [Control a] -> a -> Int -> Int -> [a] -> [Control a]
+perturbControlsDt controls scale index_min index_max rands01 = controls' where
     dts = zipWith (\r c -> (r * 2.0 - 1.0) * (t2 c - t1 c) / scale) rands01 controls
     mkControl idx dt c = if index_min <= idx && idx < index_max
                             then c {t2 = dt + t2 c}
                             else c
     controls' = zipWith3 mkControl [0..] dts controls
 
-toParameterVector :: (Floating a) => [Control a] -> [a]
-toParameterVector controls = concatMap (\c -> [t1 c, t2 c, force_phi c, force_mag c]) controls
+toParameterVector :: Floating a => [Control a] -> [a]
+toParameterVector = concatMap (\c -> [t1 c, t2 c, force_phi c, force_mag c])
 
 chunksOf :: Int -> [a] -> [[a]]
 chunksOf n xs = go xs [] where
@@ -119,3 +122,13 @@ chunksOfLens ns xs = go ns xs [] where
 
 fromParameterVector :: Floating a => [a] -> [Control a]
 fromParameterVector params = map (\[p1, p2, p3, p4] -> Control p1 p2 p3 p4) $ chunksOf 4 params
+
+filterViaBitmask :: [Bool] ->[a] -> [a]
+filterViaBitmask bools params = map snd $ filter fst $ zip bools params
+
+extendViaBitmask ::  Floating a => [(a, Bool)] -> [a] -> [a]
+extendViaBitmask = go where
+    go [] _ = []
+    go ((p0,b):p0bs) ps = if b
+        then head ps : go p0bs (tail ps)
+        else p0 : go p0bs ps

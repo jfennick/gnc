@@ -52,8 +52,10 @@ executable gnc
     -- Other library packages from which modules are imported.
     build-depends:
       , ad
+      , async
       , base
       , containers
+      , stm
       , threepenny-gui
 
     -- Directories containing source files.

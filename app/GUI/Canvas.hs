@@ -1,6 +1,7 @@
 module GUI.Canvas where
 
-import Control.Monad
+import Control.Monad (forM_, forM)
+import Control.Concurrent.STM
 
 import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
@@ -11,9 +12,11 @@ import Types
 import Utils (littleg, magnitude)
 import Numeric (showFFloat)
 
-main :: (Floating a, RealFloat a) => [[Control a]] -> [[Telemetry a]] -> a -> IO ()
-main controls_all telemetries_all score = do
-    startGUI defaultConfig (setup controls_all telemetries_all score)
+type UIData a = (Floating a, RealFloat a, Show a) => TVar ([[Control a]], [[Telemetry a]], a)
+
+main :: (Floating a, RealFloat a, Show a) => UIData a -> IO ()
+main tvar = do
+    startGUI defaultConfig (setup tvar)
 
 canvasSize :: Int
 canvasSize = 270
@@ -28,14 +31,14 @@ rescale zmin' zmax' zs = zs' where
     offset = zmin' - zmin
     zs' = map (\z -> (z + offset) * scale) zs
 
-getCanvas :: UI Element
-getCanvas = UI.canvas
-    # set UI.height canvasSize
-    # set UI.width  canvasSize
+getCanvas :: Int -> Int -> UI Element
+getCanvas sizeX sizeY = UI.canvas
+    # set UI.height sizeX
+    # set UI.width  sizeY
     # set style [("border", "solid black 1px"), ("background", "#eee")]
 
 canvasGrid :: Int -> Int -> UI [[Element]]
-canvasGrid rows cols = forM [1..rows] (\_r -> forM [1..cols] (\_c -> getCanvas))
+canvasGrid rows cols = forM [1..rows] (\_r -> forM [1..cols] (\_c -> getCanvas canvasSize canvasSize))
 
 plotTelems :: (Floating a, RealFloat a) => ([Control a], [Telemetry a], [UI.Canvas]) -> UI ()
 plotTelems (controls, telemetries, canvases) = do
@@ -65,28 +68,54 @@ plotTelems (controls, telemetries, canvases) = do
     plotPoints canvas6 xs ys
     plotPoints canvas7 downranges altitudes
 
-setup :: (Floating a, RealFloat a) => [[Control a]] -> [[Telemetry a]] -> a -> Window -> UI ()
-setup controls_all telemetries_all score window = do
-    return window # set title "Plot the things"
+setup :: (Floating a, RealFloat a, Show a) => UIData a -> Window -> UI ()
+setup tvar window = do
+    tup0 <- liftIO $ readTVarIO tvar
+    let (controls_all, telemetries_all, score) = tup0
+
+    return window # set title "I hope u like rockets"
 
     canvases <- canvasGrid (length controls_all) (length $ head controls_all)
+    canvasTextBox <- getCanvas 30 150
 
-    drawPoints <- UI.button #+ [string "Do the thing."]
-    clear     <- UI.button #+ [string "Clear the canvas."]
+    -- launchButton <- UI.button #+ [string "Optimize launch parameters"]
+    canvasTextBox # UI.strokeText ("score " ++ show score) (0,0)
 
     getBody window #+
         [column $ map (row . map element) canvases
-        , element drawPoints, element clear
+        -- , element launchButton
+        , element canvasTextBox
         ]
 
-    on UI.click clear $ const $
-        forM_ (head canvases) (\canvas -> canvas # UI.clearCanvas)
-
     -- draw some points
-    on UI.click drawPoints $ const $ do
-        -- canvas # UI.strokeText ("score " ++ show score) (fromIntegral canvasSize / 2 , fromIntegral canvasSize)
+    -- on UI.click launchButton $ const (foreverUI canvases canvasTextBox tvar)
+    foreverUI canvases canvasTextBox tvar
+
+foreverUI :: (Show a, RealFloat a) => [[UI.Canvas]] -> Element -> UIData a -> UI ()
+foreverUI canvases canvasTextBox tvar = do
+    tup0 <- liftIO $ readTVarIO tvar
+    tvar' <- liftIO $ newTVarIO tup0
+    go tvar' where
+    go tvar' = do
+        -- Use STM retry trick to wait until tup has updated
+        tup <- liftIO $ atomically $ do
+            tup <- readTVar tvar
+            tup' <- readTVar tvar'
+            if tup == tup' then retry else do
+                writeTVar tvar' tup
+                pure tup
+
+        forM_ canvases $ \canvasrow ->
+            forM_ canvasrow UI.clearCanvas
+
+        let (controls_all, telemetries_all, score) = tup
+
+        UI.clearCanvas canvasTextBox
+        canvasTextBox # UI.strokeText ("score " ++ show score) (0,25)
 
         mapM_ plotTelems $ zip3 controls_all telemetries_all canvases
+
+        go tvar'
 
 showDouble :: (Floating a, RealFloat a) => Int -> a -> [Char]
 showDouble n d = showFFloat (Just n) d ""

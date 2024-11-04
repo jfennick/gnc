@@ -31,7 +31,6 @@ data Control a = Control
     -- In polar coordinates, this is the angle measured from vertical / radial
     , force_phi :: a
     , force_mag :: a -- = 1.0 i.e. the throttle
-    -- , fixed :: Bool -- default False; used to exclude specific controls from being optimized.
     }
     deriving (Eq, Show)
 

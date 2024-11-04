@@ -1,5 +1,9 @@
 module Main where
 
+import Control.Concurrent.Async (async, wait)
+import Control.Concurrent.STM
+import Control.Monad (forM_)
+
 import Numeric.AD
 
 import Controls
@@ -31,11 +35,14 @@ main = do
 
     let ctrls_1 = contiguousTimes 0 $ [up] ++ gravityTurn1 burntime ++ [stagingDelay]
         timeStageSep = t2 $ last ctrls_1
-        timeStageSep :: Floating a => a
-        ctrls_1_bb = contiguousTimes timeStageSep [boostback, coastPhase1, landingBurn13, landingBurn3]
-        ctrls_1a = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay, boostback]
-        ctrls_1b = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay, boostback]
-        ctrls_1, ctrls_1_bb, ctrls_1a, ctrls_1b, ctrls_2 :: Floating a => [Control a]
+        timeStageSep, timeLandingBurn :: Floating a => a
+        ctrls_1_bb0 = contiguousTimes timeStageSep $ boostback ++ [coastPhase1]
+        timeLandingBurn = t2 $ last ctrls_1_bb0
+        ctrls_1_bb1 = contiguousTimes timeLandingBurn [landingBurn13, landingBurn3]
+        ctrls_1_bb = ctrls_1_bb0 ++ ctrls_1_bb1
+        ctrls_1a = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ boostback
+        ctrls_1b = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay] ++ boostback
+        ctrls_1, ctrls_1_bb, ctrls_1_bb0, ctrls_1_bb1, ctrls_1a, ctrls_1b, ctrls_2 :: Floating a => [Control a]
     --  let ctrls_t = ...
     --  let ctrls_a_t = ...
 
@@ -47,39 +54,56 @@ main = do
     let stages = [superheavyA, superheavyB, starship]
     -- let stages = [turbostage, superheavy_a_t, superheavy_b, starship]
 
-    let controlsVec = [ctrls_1_bb, ctrls_2]
-        -- controlsVec = [ctrls_1, ctrls_1_bb, ctrls_2]
-        -- For some reason, the ctrls_1 gradients are all NaN, which
-        -- causes gradientDescent to immediately return []...
+    let controlsVec = [ctrls_1, ctrls_1_bb, ctrls_2]
+        -- The t1, t2, and force_mag parameters of ctrls_1 gradients are all NaN, which
+        -- causes gradientDescent to either immediately return [] or hang.
         -- Moreover, including [coastPhase2] in ctrls_2 also yields []...
-        -- For now, just exclude them from optimization.
+        -- For now, just exclude them from optimization using optBitMask.
         controlsVec :: Floating a => [[Control a]]
     let controlsLengths = map length controlsVec
         controlsLengths :: [Int]
-    let paramsVec = toParameterVector $ concat controlsVec
-        paramsVec :: Floating a => [a]
+    let optBitmask = concat $ replicate (length $ concat controlsVec) [False, False, True, False]
+        -- i.e. selectively optimize over force_phi only; keep all other control parameters fixed
+        -- TODO: more forms of dimensional reduction and/or selective parameter rescaling
+        optBitmask :: [Bool]
+    let paramsVec0 = toParameterVector $ concat controlsVec
+        paramsVec0 :: Floating a => [a]
+    let paramsVec0Enabled = filterViaBitmask optBitmask paramsVec0
+        paramsVec0Enabled :: Floating a => [a]
 
     let fn paramsVec = (telemetries, orbit, score) where
-            results = runStages controlsLengths paramsVec ctrls_1
+            paramsVec' = extendViaBitmask (zip paramsVec0 optBitmask) paramsVec
+            results = runStages controlsLengths paramsVec'
             (telemetries, mass_prop_remaining, orbit) = extractData results
             times = map t1 $ subdivideControls dtMax $ ctrls_1 ++ ctrls_2
             score = scoreTelemetries orbit telemetries times mass_prop_remaining 1
         fn' = negate . trd3 . fn
         fn' :: (Floating a, RealFloat a) => [a] -> a
 
-    let (fx0, xgx0) = gradWith' (,) fn' paramsVec
+    let (fx0, xgx0) = gradWith' (,) fn' paramsVec0Enabled
     putStrLn $ "fx0 " ++ show fx0
-    mapM_ print $ zip paramsVec xgx0
+    mapM_ print $ zip paramsVec0Enabled xgx0
 
-    let gds = take 50 $ gradientDescent fn' paramsVec
-    mapM_ print gds
-    
-    let controls = map (subdivideControls dtMax) [ctrls_1 ++ ctrls_1_bb, ctrls_1 ++ ctrls_2]
-    let (telemetries, orbit, score) = fn $ last gds
-    putStrLn $ "orbit " ++ show orbit
-    putStrLn $ "score " ++ show score
+    let controls_init = map (subdivideControls dtMax) [ctrls_1 ++ ctrls_1_bb, ctrls_1 ++ ctrls_2]
+    tvar <- newTVarIO (controls_init, [], 0)
 
-    GUI.Canvas.main controls telemetries score
+    gdAsync <- async $ do
+        let paramsVecsEnabled = take 100 $ gradientDescent fn' paramsVec0Enabled
+        forM_ paramsVecsEnabled $ \paramsVecEnabled -> do
+            print paramsVecEnabled
+            let (fx0, xgx0) = gradWith' (,) fn' paramsVecEnabled
+            putStrLn $ "-score " ++ show fx0
+            mapM_ print $ zip paramsVecEnabled xgx0
+
+            let paramsVec' = extendViaBitmask (zip paramsVec0 optBitmask) paramsVecEnabled
+            let [ctrls_1', ctrls_1_bb', ctrls_2'] = chunksOfLens controlsLengths $ fromParameterVector paramsVec'
+            let controls = map (subdivideControls dtMax) [ctrls_1' ++ ctrls_1_bb', ctrls_1' ++ ctrls_2']
+            let (telemetries, orbit, score) = fn paramsVecEnabled
+            putStrLn $ "orbit " ++ show orbit
+            atomically $ writeTVar tvar (controls, telemetries, score)
+
+    GUI.Canvas.main tvar
+    wait gdAsync
 
 type Results a = (Floating a, RealFloat a) => [[[(Stage a, Telemetry a, Bool)]]]
 
@@ -106,10 +130,9 @@ extractData results = tup where
     orbit = trd3 $ last results_upper
     tup = (telemetries, mass_prop_remaining, orbit)
 
-runStages :: (Floating a, RealFloat a) => [Int] -> [a] -> [Control a] -> Results a
-runStages chunkLengths paramsVec ctrls_1 = results where
-    -- [ctrls_1, ctrls_1_bb, ctrls_2] = chunksOfLens chunkLengths $ fromParameterVector paramsVec
-    [ctrls_1_bb, ctrls_2] = chunksOfLens chunkLengths $ fromParameterVector paramsVec
+runStages :: (Floating a, RealFloat a) => [Int] -> [a] -> Results a
+runStages chunkLengths paramsVec = results where
+    [ctrls_1, ctrls_1_bb, ctrls_2] = chunksOfLens chunkLengths $ fromParameterVector paramsVec
 
     controls_boost1 = subdivideControls dtMax ctrls_1
     wetmass_starship = mass_dry starship + mass_prop starship + mass_payload starship
