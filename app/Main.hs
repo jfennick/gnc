@@ -71,9 +71,13 @@ main = do
 
     let fn paramsVec = (telemetries, orbit, score) where
             paramsVec' = extendViaBitmask (zip paramsVec0 optBitmask) paramsVec
-            results = runStages controlsLengths paramsVec'
+
+            [ctrls_1_, ctrls_1_bb_, ctrls_2_] = chunksOfLens controlsLengths $ fromParameterVector paramsVec'
+            controls = [ctrls_1_, ctrls_1_bb_, ctrls_2_]
+
+            results = runStages controls
             (telemetries, mass_prop_remaining, orbit) = extractData results
-            times = scanl' (+) 0 $ map delta_t $ subdivideControls dtMax $ ctrls_1 ++ ctrls_2
+            times = scanl' (+) 0 $ map delta_t $ subdivideControls dtMax $ ctrls_1_ ++ ctrls_2_
             score = scoreTelemetries orbit telemetries times mass_prop_remaining 1
         fn' = negate . trd3 . fn
         fn' :: (Floating a, RealFloat a) => [a] -> a
@@ -128,9 +132,9 @@ extractData results = tup where
     orbit = trd3 $ last results_upper
     tup = (telemetries, mass_prop_remaining, orbit)
 
-runStages :: (Floating a, RealFloat a) => [Int] -> [a] -> Results a
-runStages chunkLengths paramsVec = results where
-    [ctrls_1, ctrls_1_bb, ctrls_2] = chunksOfLens chunkLengths $ fromParameterVector paramsVec
+runStages :: (Floating a, RealFloat a) => [[Control a]] -> Results a
+runStages controls = results where
+    [ctrls_1, ctrls_1_bb, ctrls_2] = controls
 
     controls_boost1 = subdivideControls dtMax ctrls_1
     wetmass_starship = mass_dry starship + mass_prop starship + mass_payload starship
