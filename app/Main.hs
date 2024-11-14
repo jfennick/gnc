@@ -4,7 +4,16 @@ import Control.Concurrent.Async (async, wait)
 import Control.Concurrent.STM
 import Control.Monad (forM_)
 
-import Numeric.AD
+import Numeric.AD (gradientDescent)
+import Numeric.AD.Mode.Kahn (grad, gradWith')
+-- By default, Numeric.AD (grad, gradWith') gradients are calculated with Reverse mode.
+-- For unknown reasons, Reverse mode gradients can easily become NaN, which
+-- causes gradientDescent to either immediately return [] or hang.
+-- Alternatively, Kahn mode gradients appear to be much more numerically stable.
+-- Note that many of the API functions have hardcoded Reverse mode type signatures.
+-- However, they can be converted to Kahn mode simply by changing the type signature.
+-- The function bodies themselves remain identical.
+-- (Both terms AND types determine the behavior of code in Haskell!)
 
 import Controls
 import Params
@@ -53,10 +62,6 @@ main = do
     -- let stages = [turbostage, superheavy_a_t, superheavy_b, starship]
 
     let controlsVec = [ctrls_1, ctrls_1_bb, ctrls_2]
-        -- The t1, t2, and force_mag parameters of ctrls_1 gradients are all NaN, which
-        -- causes gradientDescent to either immediately return [] or hang.
-        -- Moreover, including [coastPhase2] in ctrls_2 also yields []...
-        -- For now, just exclude them from optimization using optBitMask.
         controlsVec :: Floating a => [[Control a]]
     let controlsLengths = map length controlsVec
         controlsLengths :: [Int]
