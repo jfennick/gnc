@@ -25,9 +25,7 @@ data Telemetry a = Telemetry
     deriving (Eq, Show)
 
 data Control a = Control
-    -- t1 < t2
-    { t1 :: a
-    , t2 :: a
+    { delta_t :: a -- > 0
     -- In polar coordinates, this is the angle measured from vertical / radial
     , force_phi :: a
     , force_mag :: a -- = 1.0 i.e. the throttle

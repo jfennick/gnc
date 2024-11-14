@@ -13,6 +13,7 @@ import Simulation
 import Types
 
 import GUI.Canvas qualified
+import Data.List (scanl')
 
 fst3 :: (a, b, c) -> a
 fst3 (x, _y, _z) = x
@@ -33,21 +34,18 @@ main = do
         burntime, burntime_a, burntime_b, burntime_t, burntime_a_t :: Floating a => a
     putStrLn $ "burntime " ++ show burntime
 
-    let ctrls_1 = contiguousTimes 0 $ [up] ++ gravityTurn1 burntime ++ [stagingDelay]
-        timeStageSep = t2 $ last ctrls_1
-        timeStageSep, timeLandingBurn :: Floating a => a
-        ctrls_1_bb0 = contiguousTimes timeStageSep $ boostback ++ [coastPhase1]
-        timeLandingBurn = t2 $ last ctrls_1_bb0
-        ctrls_1_bb1 = contiguousTimes timeLandingBurn [landingBurn13, landingBurn3]
+    let ctrls_1 = [up] ++ gravityTurn1 burntime ++ [stagingDelay]
+        ctrls_1_bb0 = boostback ++ coastPhase1
+        ctrls_1_bb1 = [landingBurn13, landingBurn3]
         ctrls_1_bb = ctrls_1_bb0 ++ ctrls_1_bb1
-        ctrls_1a = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ boostback
-        ctrls_1b = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay] ++ boostback
+        ctrls_1a = [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ boostback
+        ctrls_1b = [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay] ++ boostback
         ctrls_1, ctrls_1_bb, ctrls_1_bb0, ctrls_1_bb1, ctrls_1a, ctrls_1b, ctrls_2 :: Floating a => [Control a]
     --  let ctrls_t = ...
     --  let ctrls_a_t = ...
 
-        ctrls_2 = contiguousTimes timeStageSep $ gravityTurn2 ++ [over12] -- ++ [coastPhase2]
-        -- ctrls_2 = contiguousTimes 0 $ [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay] ++ gravityTurn2 ++ [over12]
+        ctrls_2 = gravityTurn2 ++ over12 -- ++ coastPhase2
+        -- ctrls_2 = [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay] ++ gravityTurn2 ++ [over12]
 
     -- let stages = [superheavy, starship]
     -- let stages = [turbostage, superheavy_t, starship]
@@ -62,7 +60,7 @@ main = do
         controlsVec :: Floating a => [[Control a]]
     let controlsLengths = map length controlsVec
         controlsLengths :: [Int]
-    let optBitmask = concat $ replicate (length $ concat controlsVec) [False, False, True, False]
+    let optBitmask = concat $ replicate (length $ concat controlsVec) [False, True, False]
         -- i.e. selectively optimize over force_phi only; keep all other control parameters fixed
         -- TODO: more forms of dimensional reduction and/or selective parameter rescaling
         optBitmask :: [Bool]
@@ -75,7 +73,7 @@ main = do
             paramsVec' = extendViaBitmask (zip paramsVec0 optBitmask) paramsVec
             results = runStages controlsLengths paramsVec'
             (telemetries, mass_prop_remaining, orbit) = extractData results
-            times = map t1 $ subdivideControls dtMax $ ctrls_1 ++ ctrls_2
+            times = scanl' (+) 0 $ map delta_t $ subdivideControls dtMax $ ctrls_1 ++ ctrls_2
             score = scoreTelemetries orbit telemetries times mass_prop_remaining 1
         fn' = negate . trd3 . fn
         fn' :: (Floating a, RealFloat a) => [a] -> a

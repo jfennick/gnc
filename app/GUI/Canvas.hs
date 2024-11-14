@@ -11,6 +11,7 @@ import Simulation
 import Types
 import Utils (littleg, magnitude)
 import Numeric (showFFloat)
+import Data.List (scanl')
 
 type UIData a = (Floating a, RealFloat a, Show a) => TVar ([[Control a]], [[Telemetry a]], a)
 
@@ -44,7 +45,7 @@ plotTelems :: (Floating a, RealFloat a) => ([Control a], [Telemetry a], [UI.Canv
 plotTelems (controls, telemetries, canvases) = do
     let xs = map (/ 1000.0) $ map (x . position) telemetries
     let ys = map (/ 1000.0) $ map (y . position) telemetries
-    let times = map t1 controls
+    let times = scanl' (+) 0 $ map delta_t controls
     let downranges = getDownranges (map getPhi telemetries) times
     let altitudes = map (/ 1000.0) $ map getAltitude telemetries
     let velocities = map (/ 1000.0) $ map getVelocity telemetries

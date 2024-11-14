@@ -110,7 +110,7 @@ integrateRungeKutta4 stage control reached_orbit telem = (stage', telem') where
     pos0 = position telem
     vel0 = velocity telem
     -- acc = acceleration telem
-    dt = t2 control - t1 control
+    dt = delta_t control
 
     -- mass_payload is the total mass of all the (remaining) stages,
     -- excluding the remaining prop mass of the current stage.
