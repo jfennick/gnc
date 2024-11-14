@@ -234,20 +234,22 @@ getVelocity telem = speed where
 dropLast :: [a] -> [a]
 dropLast xs = take (length xs - 1) xs
 
-scoreTelemetries :: (Floating a, Ord a, RealFloat a) => Bool -> [[Telemetry a]] -> [a] -> [a] -> Int -> a
-scoreTelemetries orbit_other telemetries times mass_prop_remaining i = score where
+scoreComponents :: (Floating a, Ord a, RealFloat a) => [[Telemetry a]] -> [a] -> [a] -> Int -> (Bool, a, [a])
+scoreComponents telemetries times mass_prop_remaining i = (orbit_self, last downranges, components) where
     downranges = map (\telems -> last $ getDownranges (map getPhi telems) times) telemetries
+    altitudes = map (last . map getAltitude) telemetries
 
     -- NOTE: The various score components will in general have different units.
     -- This is okay!
     -- NOTE: Use absolute value here instead of squaring the residual otherwise,
     -- the return-to-launch-site penalty can outweigh the dV to orbit!
     -- Only care about initial stages for rtls penalty
-    rtls_penalty_distance = sum $ map (^ 2) $ dropLast downranges
+    rtls_penalty_distance = sum $ map (^ 2) $ map (\d -> d - 5) $ dropLast downranges -- use abs, not (^ 2) ?
+    -- ^ aim for 5km downrange; let the gridfins do the rest ^
+    rtls_penalty_altitude = sum $ map (^ 2) $ dropLast altitudes -- use abs, not (^ 2) ?
 
-    -- Only care about final stage for orbit check and delta_velocity
-    telemetry = last telemetries
-    lastT = last telemetry
+    -- Only care about final stage for orbit check
+    lastT = last $ last telemetries
     (perihelion, apohelion, eccentricity_squared) = visviva (position lastT) (velocity lastT)
 
     -- Nominal parking orbit 200km x 200km
@@ -258,22 +260,30 @@ scoreTelemetries orbit_other telemetries times mass_prop_remaining i = score whe
     -- Check if we failed to reach orbit
     orbit_self = perihelion > radius_earth + perihelion_nominal
 
-    penalty_eccentricity = (10000.0 * (sqrt eccentricity_squared - eccentricity_nominal)) ^ 2
+    penalty_eccentricity = (10000.0 * (sqrt eccentricity_squared - eccentricity_nominal)) ^ 2 -- use abs, not (^ 2) ?
     ifactor = if i < 1000 then 0.001 else 0.1
 
-    penalty_peri = ((perihelion - perihelion_nominal) * ifactor / 1000.0) ^ 2
-    penalty_apo = ((apohelion - apohelion_nominal) * ifactor / 1000.0) ^ 2
+    penalty_peri = ((perihelion - perihelion_nominal) * ifactor / 1000.0) ^ 2-- use abs, not (^ 2) ?
+    penalty_apo = ((apohelion - apohelion_nominal) * ifactor / 1000.0) ^ 2 -- use abs, not (^ 2) ?
 
     getSpeed telem = magnitude (x $ velocity telem) (y $ velocity telem)
-    speeds = map getSpeed telemetry
-    delta_velocity = maximum speeds -- This ?
-    -- delta_velocity = getSpeed (last telemetry) - getSpeed (head telemetry) -- or this ?
+    delta_velocity telems = getSpeed (last telems) - getSpeed (head telems)
+    rtls_penalty_velocity = sum $ dropLast $ map delta_velocity telemetries -- we want zero dv for the boost stages
 
     mass_to_orbit = last mass_prop_remaining
-    rtls_penalty_mass = sum $ map abs $ dropLast mass_prop_remaining
+    rtls_penalty_mass = sum $ dropLast mass_prop_remaining
     -- map abs ? instead, guarantee we cannot run out of propellant
 
-    score' = mass_to_orbit + delta_velocity - 10.0 * rtls_penalty_distance - 0.1 * rtls_penalty_mass - penalty_eccentricity - penalty_peri - penalty_apo
+    -- components = [mass_to_orbit, rtls_penalty_mass, rtls_penalty_distance, rtls_penalty_altitude, rtls_penalty_velocity, penalty_eccentricity, penalty_peri, penalty_apo]
+    components = [mass_to_orbit, rtls_penalty_mass, rtls_penalty_distance, penalty_eccentricity, penalty_peri, penalty_apo]
+
+scoreTelemetries :: (Floating a, Ord a, RealFloat a) => Bool -> [[Telemetry a]] -> [a] -> [a] -> Int -> a
+scoreTelemetries orbit_other telemetries times mass_prop_remaining i = score where
+    -- scoreScaleFactors = [1.0, -0.1, -10.0, -10.0, -1.0, -1.0, -1.0, -1.0]
+    scoreScaleFactors = [1.0, -0.1, -10.0, -1.0, -1.0, -1.0]
+    scoreScaleFactors :: (Floating a, Ord a, RealFloat a) => [a]
+    (orbit_self, downrange, components) = scoreComponents telemetries times mass_prop_remaining i
+    score' = sum $ zipWith (*) scoreScaleFactors components
 
     neg_inf = -100000000
     -- If we have not reached orbit yet,
@@ -285,6 +295,6 @@ scoreTelemetries orbit_other telemetries times mass_prop_remaining i = score whe
     score
       | orbit_self = score'
       | orbit_other = neg_inf
-      | otherwise = last downranges / 100.0
+      | otherwise = downrange / 100.0
         -- Divide by 100 so this is numerically smaller than the dV
         -- required to achieve orbit.

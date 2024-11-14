@@ -33,6 +33,9 @@ snd3 (_x, y, _z) = y
 trd3 :: (a, b, c) -> c
 trd3 (_x, _y, z) = z
 
+trd4 :: (a, b, c, d) -> c
+trd4 (_x, _y, z, _w) = z
+
 main :: IO ()
 main = do
     let burntime = 120 -- 150? -- 134 == 0.85 * getBurnTime 3400000.0 (engines superheavy)
@@ -74,7 +77,7 @@ main = do
     let paramsVec0Enabled = filterViaBitmask optBitmask paramsVec0
         paramsVec0Enabled :: Floating a => [a]
 
-    let fn paramsVec = (telemetries, orbit, score) where
+    let fn paramsVec = (telemetries, orbit, (score, components), mass_prop_remaining) where
             paramsVec' = extendViaBitmask (zip paramsVec0 optBitmask) paramsVec
 
             [ctrls_1_, ctrls_1_bb_, ctrls_2_] = chunksOfLens controlsLengths $ fromParameterVector paramsVec'
@@ -84,15 +87,18 @@ main = do
             (telemetries, mass_prop_remaining, orbit) = extractData results
             times = scanl' (+) 0 $ map delta_t $ subdivideControls dtMax $ ctrls_1_ ++ ctrls_2_
             score = scoreTelemetries orbit telemetries times mass_prop_remaining 1
-        fn' = negate . trd3 . fn
+            (_, _, components) = scoreComponents telemetries times mass_prop_remaining 1
+        fn' = negate . fst . trd4 . fn
         fn' :: (Floating a, RealFloat a) => [a] -> a
+
 
     let (fx0, xgx0) = gradWith' (,) fn' paramsVec0Enabled
     putStrLn $ "fx0 " ++ show fx0
     mapM_ print $ zip paramsVec0Enabled xgx0
 
-    let controls_init = map (subdivideControls dtMax) [ctrls_1 ++ ctrls_1_bb, ctrls_1 ++ ctrls_2]
-    tvar <- newTVarIO (controls_init, [], 0)
+    let (telemetries0, orbit0, (score0, components0), mass_prop_remaining0) = fn paramsVec0Enabled
+    let controls0 = map (subdivideControls dtMax) [ctrls_1 ++ ctrls_1_bb, ctrls_1 ++ ctrls_2]
+    tvar <- newTVarIO (controls0, [], (0.0, replicate (length components0) 0.0))
 
     gdAsync <- async $ do
         let paramsVecsEnabled = take 100 $ gradientDescent fn' paramsVec0Enabled
@@ -104,10 +110,10 @@ main = do
 
             let paramsVec' = extendViaBitmask (zip paramsVec0 optBitmask) paramsVecEnabled
             let [ctrls_1', ctrls_1_bb', ctrls_2'] = chunksOfLens controlsLengths $ fromParameterVector paramsVec'
-            let controls = map (subdivideControls dtMax) [ctrls_1' ++ ctrls_1_bb', ctrls_1' ++ ctrls_2']
-            let (telemetries, orbit, score) = fn paramsVecEnabled
+            let controlsSub = map (subdivideControls dtMax) [ctrls_1' ++ ctrls_1_bb', ctrls_1' ++ ctrls_2']
+            let (telemetries, orbit, (score, components), mass_prop_remaining) = fn paramsVecEnabled
             putStrLn $ "orbit " ++ show orbit
-            atomically $ writeTVar tvar (controls, telemetries, score)
+            atomically $ writeTVar tvar (controlsSub, telemetries, (score, components))
 
     GUI.Canvas.main tvar
     wait gdAsync

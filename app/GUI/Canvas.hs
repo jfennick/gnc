@@ -13,7 +13,7 @@ import Utils (littleg, magnitude)
 import Numeric (showFFloat)
 import Data.List (scanl')
 
-type UIData a = (Floating a, RealFloat a, Show a) => TVar ([[Control a]], [[Telemetry a]], a)
+type UIData a = (Floating a, RealFloat a, Show a) => TVar ([[Control a]], [[Telemetry a]], (a, [a]))
 
 main :: (Floating a, RealFloat a, Show a) => UIData a -> IO ()
 main tvar = do
@@ -72,15 +72,14 @@ plotTelems (controls, telemetries, canvases) = do
 setup :: (Floating a, RealFloat a, Show a) => UIData a -> Window -> UI ()
 setup tvar window = do
     tup0 <- liftIO $ readTVarIO tvar
-    let (controls_all, telemetries_all, score) = tup0
+    let (controls_all, telemetries_all, (score, components)) = tup0
 
     return window # set title "I hope u like rockets"
 
     canvases <- canvasGrid (length controls_all) (length $ head controls_all)
-    canvasTextBox <- getCanvas 30 150
+    canvasTextBox <- getCanvas (25 * 7) 200 -- length components
 
     -- launchButton <- UI.button #+ [string "Optimize launch parameters"]
-    canvasTextBox # UI.strokeText ("score " ++ show score) (0,0)
 
     getBody window #+
         [column $ map (row . map element) canvases
@@ -109,10 +108,12 @@ foreverUI canvases canvasTextBox tvar = do
         forM_ canvases $ \canvasrow ->
             forM_ canvasrow UI.clearCanvas
 
-        let (controls_all, telemetries_all, score) = tup
+        let (controls_all, telemetries_all, (score, components)) = tup
 
         UI.clearCanvas canvasTextBox
         canvasTextBox # UI.strokeText ("score " ++ show score) (0,25)
+        forM_ (zip [2..] components) $ \(i, component) -> do
+            canvasTextBox # UI.strokeText (show component) (0,5 + i*20)
 
         mapM_ plotTelems $ zip3 controls_all telemetries_all canvases
 
