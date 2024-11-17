@@ -9,13 +9,13 @@ data Engine a = Engine
     , diameter :: a -- m
     , mass :: a -- kg
     }
-    deriving (Eq, Show, Generic, ToDhall, FromDhall)
+    deriving (Eq, Show, Functor, Generic, ToDhall, FromDhall)
 
 data Coords a = Coords
     { x :: a
     , y :: a
     }
-    deriving (Eq, Show, Generic, ToDhall, FromDhall)
+    deriving (Eq, Show, Functor, Generic, ToDhall, FromDhall)
 
 data Telemetry a = Telemetry
     { position :: Coords a
@@ -25,7 +25,7 @@ data Telemetry a = Telemetry
     , dynamic_pressure :: a
     -- , mass_prop_used :: a
     }
-    deriving (Eq, Show, Generic, ToDhall, FromDhall)
+    deriving (Eq, Show, Functor, Generic, ToDhall, FromDhall)
 
 data Control a = Control
     { delta_t :: a -- > 0
@@ -33,21 +33,39 @@ data Control a = Control
     , force_phi :: a
     , force_mag :: a -- = 1.0 i.e. the throttle
     }
-    deriving (Eq, Show, Generic, ToDhall, FromDhall)
+    deriving (Eq, Show, Functor, Generic, ToDhall, FromDhall)
 
 data Stage a = Stage
     { mass_dry :: a -- kg
     , mass_payload :: a -- kg
     , mass_prop :: a -- kg
     , engines :: [Engine a]
-    , burn_time :: a -- sec
     }
-    deriving (Eq, Show, Generic, ToDhall, FromDhall)
+    deriving (Eq, Show, Functor, Generic, ToDhall, FromDhall)
 
 data Config a = Config
     { dtMax :: a
     , accLimit :: a
     , stages :: [Stage a]
-    , controls :: [Control a]
+    , controls :: [[Controls a]]
     }
-    deriving (Eq, Show, Generic, ToDhall, FromDhall)
+    deriving (Eq, Show, Functor, Generic, ToDhall, FromDhall)
+
+data PieceWiseTurn a = PieceWiseTurn
+    { init_angle :: a
+    , final_angle :: a
+    , numturns :: Int
+    , turntime :: a
+    }
+    deriving (Eq, Show, Functor, Generic, ToDhall, FromDhall)
+
+data Controls a =
+      Controls [Control a]
+    | PieceWise (PieceWiseTurn a)
+    | NullStaging a -- delta_t only
+    | NullCoast a -- delta_t only
+    deriving (Eq, Show, Functor, Generic, ToDhall, FromDhall)
+
+isStaging :: Controls a -> Bool
+isStaging (NullStaging _) = True
+isStaging _ = False

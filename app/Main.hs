@@ -18,7 +18,6 @@ import Numeric.AD.Mode.Kahn (grad, gradWith')
 
 import Controls
 import Params
-import Rockets
 import Simulation
 import Types
 import Utils
@@ -42,39 +41,25 @@ main :: IO ()
 main = do
     config <- Dhall.inputFile Dhall.auto "app/config.dhall" :: IO (Config Double)
     print config
+    let config' = fmap realToFrac config
+        config' :: Floating a => Config a
+
     let dtMax' :: Floating a => a
-        dtMax' = realToFrac $ dtMax config -- integration timestep, seconds
+        dtMax' = dtMax config' -- integration timestep, seconds
     let accLimit' :: Floating a => a
-        accLimit' = littleg * (realToFrac $ accLimit config)
+        accLimit' = littleg * (accLimit config')
 
-    let burntime = 120 -- 150? -- 134 == 0.85 * getBurnTime 3400000.0 (engines superheavy)
-        burntime_a = 0.91 * getBurnTime 2200000.0 (engines superheavyA)
-        burntime_b = 0.77 * getBurnTime 1200000.0 (engines superheavyB)
-        burntime_t = 0.85 * getBurnTime (3400000.0 - 50000.0) (engines superheavy)
-        burntime_a_t = 0.91 * getBurnTime (2200000.0 - 50000.0) (engines superheavyA)
-        burntime, burntime_a, burntime_b, burntime_t, burntime_a_t :: Floating a => a
-    putStrLn $ "burntime " ++ show burntime
-
-    let ctrls_1 = [up] ++ gravityTurn1 burntime ++ [stagingDelay]
-        ctrls_1_bb0 = boostback ++ coastPhase1
-        ctrls_1_bb1 = [landingBurn13, landingBurn3]
-        ctrls_1_bb = ctrls_1_bb0 ++ ctrls_1_bb1
-        ctrls_1a = [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ boostback
-        ctrls_1b = [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay] ++ boostback
-        ctrls_1, ctrls_1_bb, ctrls_1_bb0, ctrls_1_bb1, ctrls_1a, ctrls_1b, ctrls_2 :: Floating a => [Control a]
-    --  let ctrls_t = ...
-    --  let ctrls_a_t = ...
-
-        ctrls_2 = gravityTurn2 ++ over12 -- ++ coastPhase2
-        -- ctrls_2 = [up] ++ gravityTurn1a burntime_a ++ [stagingDelay] ++ gravityTurn1b burntime_b ++ [stagingDelay] ++ gravityTurn2 ++ [over12]
-
-    -- let stages = [superheavy, starship]
-    -- let stages = [turbostage, superheavy_t, starship]
-    let stages = [superheavyA, superheavyB, starship]
-    -- let stages = [turbostage, superheavy_a_t, superheavy_b, starship]
-
-    let controlsVec = [ctrls_1, ctrls_1_bb, ctrls_2]
+    let stages' = stages config'
+        stages' :: Floating a => [Stage a]
+    let controls' = controls config'
+        controls' :: Floating a => [[Controls a]]
+    let controlsVec = mkControlsVec controls'
         controlsVec :: Floating a => [[Control a]]
+    print "controlsVec"
+    mapM_ (mapM_ print) controlsVec
+
+    let [ctrls_1, ctrls_1_bb, ctrls_2] = controlsVec
+
     let controlsLengths = map length controlsVec
         controlsLengths :: [Int]
     let optBitmask = concat $ replicate (length $ concat controlsVec) [False, True, False]
@@ -92,7 +77,7 @@ main = do
             [ctrls_1_, ctrls_1_bb_, ctrls_2_] = chunksOfLens controlsLengths $ fromParameterVector paramsVec'
             controls = [ctrls_1_, ctrls_1_bb_, ctrls_2_]
 
-            results = runStages accLimit' dtMax' controls
+            results = runStages accLimit' dtMax' stages' controls
             (telemetries, mass_prop_remaining, orbit) = extractData results
             times = scanl' (+) 0 $ map delta_t $ subdivideControls dtMax' $ ctrls_1_ ++ ctrls_2_
             score = scoreTelemetries orbit telemetries times mass_prop_remaining 1
@@ -152,8 +137,9 @@ extractData results = tup where
     orbit = trd3 $ last results_upper
     tup = (telemetries, mass_prop_remaining, orbit)
 
-runStages :: (Floating a, RealFloat a) => a -> a -> [[Control a]] -> Results a
-runStages accLimit dtMax controls = results where
+runStages :: (Floating a, RealFloat a) => a -> a -> [Stage a] -> [[Control a]] -> Results a
+runStages accLimit dtMax stages controls = results where
+    [superheavy, starship] = stages
     [ctrls_1, ctrls_1_bb, ctrls_2] = controls
 
     controls_boost1 = subdivideControls dtMax ctrls_1

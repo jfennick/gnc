@@ -30,14 +30,27 @@ let Stage =
     , mass_payload : Double
     , mass_prop : Double
     , engines : List Engine
-    , burn_time : Double
     }
+
+let PieceWiseTurn =
+    { init_angle : Double
+    , final_angle : Double
+    , numturns : Integer
+    , turntime : Double
+    }
+
+let Controls =
+    < Controls : List Control
+    | PieceWise : PieceWiseTurn
+    | NullStaging : Double
+    | NullCoast : Double
+    >
 
 let Config =
     { dtMax : Double
     , accLimit : Double
     , stages : List Stage
-    , controls : List Control
+    , controls : List (List Controls)
     }
 
 in
@@ -47,4 +60,6 @@ in
 , Control
 , Stage
 , Config
+, PieceWiseTurn
+, Controls
 }

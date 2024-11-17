@@ -2,9 +2,11 @@ module Simulation where
 
 import Constants
 import Params
-import Rockets
 import Types
 import Utils
+
+crossSectionalArea :: Floating a => a
+crossSectionalArea = pi * 4.5 * 4.5 -- m^2
 
 getForces :: (Floating a, Ord a, RealFloat a) => a -> a -> Stage a -> Control a -> Bool -> (a, a, a, a, a) -> (a, a, a, a)
 getForces accLimit mass_stages stage control orbit (mass_prop_remaining, pos_x, pos_y, vel_x, vel_y) = forces where

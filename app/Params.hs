@@ -18,17 +18,6 @@ getInitialTelemetry = telem where
         dynamic_pressure = 0.0
         }
 
-getStageSepTimes :: Floating a => [Stage a] -> [a]
-getStageSepTimes stages = sep_times where
-    burn_times = map burn_time stages
-    sep_times = scanl' (+) 0 burn_times
-
-getStageTimeIntervals :: Floating a => [Stage a] -> [(a, a)]
-getStageTimeIntervals stages = times where
-    sep_times = getStageSepTimes stages
-    zipped = zip sep_times $ tail sep_times
-    times = (0.0, head sep_times) : zipped
-
 getDownranges :: Floating a => [a] -> [a] -> [a]
 getDownranges phis times = downranges where
     downranges = zipWith (\time phi -> (radius_earth * phi - tangental_velocity_earth * time) / 1000.0) times phis
