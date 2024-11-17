@@ -7,14 +7,6 @@ import Data.List (scanl')
 
 -- Simulation setup
 -- Parameters
-dtMax :: Floating a => a
-dtMax = 0.5 -- integration timestep, seconds
-timeLimit :: Floating a => a
-timeLimit = 10000.0 -- seconds
-numTimesteps :: Int
-numTimesteps = truncate $ timeLimit / dtMax
-accelerationLimit :: Floating a => a
-accelerationLimit = 4.0 * littleg
 
 getInitialTelemetry :: (Floating a, Ord a) => Telemetry a
 getInitialTelemetry = telem where

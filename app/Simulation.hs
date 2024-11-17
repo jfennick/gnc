@@ -6,8 +6,8 @@ import Rockets
 import Types
 import Utils
 
-getForces :: (Floating a, Ord a, RealFloat a) => a -> Stage a -> Control a -> Bool -> (a, a, a, a, a) -> (a, a, a, a)
-getForces mass_stages stage control orbit (mass_prop_remaining, pos_x, pos_y, vel_x, vel_y) = forces where
+getForces :: (Floating a, Ord a, RealFloat a) => a -> a -> Stage a -> Control a -> Bool -> (a, a, a, a, a) -> (a, a, a, a)
+getForces accLimit mass_stages stage control orbit (mass_prop_remaining, pos_x, pos_y, vel_x, vel_y) = forces where
     mass_curr = mass_stages + mass_prop_remaining
     (pos_rho, pos_phi) = cart2pol pos_x pos_y
     radius = magnitude pos_x pos_y
@@ -67,13 +67,13 @@ getForces mass_stages stage control orbit (mass_prop_remaining, pos_x, pos_y, ve
         -- For the purpose of limiting structural loads we can ignore gravity,
         -- and the acceleration near maxQ is nowhere near this limit.
         acceleration_mag = thrust_mag / mass_curr
-        acc_factor = accelerationLimit / acceleration_mag
+        acc_factor = accLimit / acceleration_mag
 
         --thrust_factor = 1.0
         thrust_tuple = if acc_factor >= 1.0
             then (thrust_x, thrust_y, thrust_factor)
             else (thrust_x', thrust_y', thrust_factor') where
-                excess_thrust = (acceleration_mag - accelerationLimit) * mass_curr
+                excess_thrust = (acceleration_mag - accLimit) * mass_curr
                 thrust_factor' = (thrust_mag - excess_thrust) / thrust_mag
                 thrust_x' = thrust_x * acc_factor
                 thrust_y' = thrust_y * acc_factor
@@ -85,28 +85,28 @@ getAcceleration forces mass = acc where
     (forces_sum_x, forces_sum_y, _forceDragMag, _thrust_factor) = forces
     acc = Coords {x = forces_sum_x / mass, y = forces_sum_y / mass}
 
-step :: (Floating a, Ord a, RealFloat a) => (Stage a, Telemetry a, Bool) -> Control a -> (Stage a, Telemetry a, Bool)
-step (stage, telem, reached_orbit_before) control = (stage', telem', reached_orbit_now) where
-    (stage', telem') = integrateRungeKutta4 stage control reached_orbit_before telem
+step :: (Floating a, Ord a, RealFloat a) => (Stage a, Telemetry a, Bool) -> (Control a, a) -> (Stage a, Telemetry a, Bool)
+step (stage, telem, reached_orbit_before) (control, accLimit) = (stage', telem', reached_orbit_now) where
+    (stage', telem') = integrateRungeKutta4 accLimit stage control reached_orbit_before telem
 
     (perihelion, _apohelion, _eccentricity_squared) = visviva (position telem') (velocity telem')
     perihelion_nominal = 200000.0
     reached_orbit_now = perihelion > radius_earth + perihelion_nominal
 
-run :: (Floating a, Ord a, RealFloat a) => Stage a -> [Control a] -> Telemetry a -> [(Stage a, Telemetry a, Bool)]
-run stage controls telemInit = resultsShortCircuit where
+run :: (Floating a, Ord a, RealFloat a) => a -> Stage a -> [Control a] -> Telemetry a -> [(Stage a, Telemetry a, Bool)]
+run accLimit stage controls telemInit = resultsShortCircuit where
     -- controls is assumed to contain disjoint contiguous time intervals (NOT necessarily uniform dt!)
     -- tstart <- getCurrentTime
     -- tfinal <- getCurrentTime
     -- let elapsed_time = tfinal = tinit
 
-    results = scanl step (stage, telemInit, False) controls
+    results = scanl step (stage, telemInit, False) $ zip controls $ repeat accLimit
     resultsShortCircuit = takeWhile (\(_, _, orbit_yet) -> not orbit_yet) results
 
     -- stageTimeIntervals = getStageTimeIntervals stages
 
-integrateRungeKutta4 :: (Floating a, Ord a, RealFloat a) => Stage a -> Control a -> Bool -> Telemetry a -> (Stage a, Telemetry a)
-integrateRungeKutta4 stage control reached_orbit telem = (stage', telem') where
+integrateRungeKutta4 :: (Floating a, Ord a, RealFloat a) => a -> Stage a -> Control a -> Bool -> Telemetry a -> (Stage a, Telemetry a)
+integrateRungeKutta4 accLimit stage control reached_orbit telem = (stage', telem') where
     pos0 = position telem
     vel0 = velocity telem
     -- acc = acceleration telem
@@ -118,7 +118,7 @@ integrateRungeKutta4 stage control reached_orbit telem = (stage', telem') where
     mass_prop_remaining = mass_prop stage
     mass_curr = mass_stages + mass_prop_remaining - 0.0
 
-    forces0 = getForces mass_stages stage control reached_orbit (mass_prop_remaining, x pos0, y pos0, x vel0, y vel0)
+    forces0 = getForces accLimit mass_stages stage control reached_orbit (mass_prop_remaining, x pos0, y pos0, x vel0, y vel0)
     acc1 = getAcceleration forces0 mass_curr
 
     (_, _, forceDragMag, thrust_factor) = forces0
@@ -142,7 +142,7 @@ integrateRungeKutta4 stage control reached_orbit telem = (stage', telem') where
     vel1 = Coords vel1x vel1y
 
     mass_curr_minus_2 = mass_stages + mass_prop_remaining - (prop_used / 2.0)
-    forces1 = getForces mass_stages stage control reached_orbit (mass_prop_remaining - prop_used / 2.0, x pos1, y pos1, x vel1, y vel1)
+    forces1 = getForces accLimit mass_stages stage control reached_orbit (mass_prop_remaining - prop_used / 2.0, x pos1, y pos1, x vel1, y vel1)
     acc2 = getAcceleration forces1 mass_curr_minus_2
 
     -- positionMidx = x pos0 + h * x vel0
@@ -162,7 +162,7 @@ integrateRungeKutta4 stage control reached_orbit telem = (stage', telem') where
     vel2 = Coords vel2x vel2y
 
     -- mass_curr_minus_2 = mass_stages + mass_prop_remaining - (prop_used / 2.0)
-    forces2 = getForces mass_stages stage control reached_orbit (mass_prop_remaining - prop_used / 2.0, x pos2, y pos2, x vel2, y vel2)
+    forces2 = getForces accLimit mass_stages stage control reached_orbit (mass_prop_remaining - prop_used / 2.0, x pos2, y pos2, x vel2, y vel2)
     acc3 = getAcceleration forces2 mass_curr_minus_2
 
     pos3x = x pos0 + h * x vel2
@@ -174,7 +174,7 @@ integrateRungeKutta4 stage control reached_orbit telem = (stage', telem') where
     vel3 = Coords vel3x vel3y
 
     mass_curr_minus = mass_stages + mass_prop_remaining - prop_used
-    forces3 = getForces mass_stages stage control reached_orbit (mass_prop_remaining, x pos3, y pos3, x vel3, y vel3)
+    forces3 = getForces accLimit mass_stages stage control reached_orbit (mass_prop_remaining, x pos3, y pos3, x vel3, y vel3)
     acc4 = getAcceleration forces3 mass_curr_minus
 
     -- Finally, perform a weighted average of the four estimates.

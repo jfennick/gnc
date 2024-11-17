@@ -55,6 +55,7 @@ executable gnc
       , async
       , base
       , containers
+      , dhall
       , stm
       , threepenny-gui
 
