@@ -2,7 +2,7 @@ module GUI.Canvas where
 
 import Control.Monad (forM_, forM)
 import Control.Concurrent.STM
-
+import Dhall ( inputFile, auto )
 import qualified Graphics.UI.Threepenny as UI
 import Graphics.UI.Threepenny.Core
 
@@ -12,12 +12,20 @@ import Types
 import Utils (littleg, magnitude)
 import Numeric (showFFloat)
 import Data.List (scanl')
+import MainCLI (mainCLI')
 
 type UIData a = (Floating a, RealFloat a, Show a) => TVar ([[Control a]], [[Telemetry a]], (a, [a]))
 
-main :: (Floating a, RealFloat a, Show a) => UIData a -> IO ()
-main tvar = do
-    startGUI defaultConfig (setup tvar)
+mainGUI :: IO ()
+mainGUI = do
+    tvar <- newTVarIO ([], [], (0.0, []))
+    config <- Dhall.inputFile Dhall.auto "app/config.dhall" :: IO (Types.Config Double)
+    print config
+    mainGUI' tvar config
+
+mainGUI' :: (Floating a, RealFloat a, Show a) => UIData a -> Types.Config Double -> IO ()
+mainGUI' tvar config = do
+    startGUI defaultConfig (setup tvar config)
 
 canvasSize :: Int
 canvasSize = 270
@@ -69,8 +77,8 @@ plotTelems (controls, telemetries, canvases) = do
     plotPoints canvas6 xs ys
     plotPoints canvas7 downranges altitudes
 
-setup :: (Floating a, RealFloat a, Show a) => UIData a -> Window -> UI ()
-setup tvar window = do
+setup :: (Floating a, RealFloat a, Show a) => UIData a -> Types.Config Double -> Window -> UI ()
+setup tvar config window = do
     tup0 <- liftIO $ readTVarIO tvar
     let (controls_all, telemetries_all, (score, components)) = tup0
 

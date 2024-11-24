@@ -1,4 +1,4 @@
-module Main where
+module MainCLI where
 
 import Control.Concurrent.Async (async, wait)
 import Control.Concurrent.STM
@@ -22,7 +22,7 @@ import Simulation
 import Types
 import Utils
 
-import GUI.Canvas qualified
+-- import GUI.Canvas qualified
 import Data.List (scanl')
 
 fst3 :: (a, b, c) -> a
@@ -37,10 +37,15 @@ trd3 (_x, _y, z) = z
 trd4 :: (a, b, c, d) -> c
 trd4 (_x, _y, z, _w) = z
 
-main :: IO ()
-main = do
+mainCLI :: IO ()
+mainCLI = do
+    tvar <- newTVarIO ([], [], (0.0, []))
     config <- Dhall.inputFile Dhall.auto "app/config.dhall" :: IO (Config Double)
     print config
+    mainCLI' tvar config
+
+mainCLI' :: (Floating a, RealFloat a, Ord a, Show a) => TVar ([[Control a]], [[Telemetry a]], (a, [a])) -> Config Double -> IO ()
+mainCLI' tvar config = do
     let config' = fmap realToFrac config
         config' :: Floating a => Config a
 
@@ -109,8 +114,9 @@ main = do
             putStrLn $ "orbit " ++ show orbit
             atomically $ writeTVar tvar (controlsSub, telemetries, (score, components))
 
-    GUI.Canvas.main tvar
-    wait gdAsync
+    -- GUI.Canvas.mainGUI' tvar config)
+    -- wait gdAsync
+    pure ()
 
 type Results a = (Floating a, RealFloat a) => [[[(Stage a, Telemetry a, Bool)]]]
 

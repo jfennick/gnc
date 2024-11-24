@@ -43,6 +43,7 @@ executable gnc
       Utils
       Simulation
       Types
+      MainCLI
       GUI.Canvas
 
     -- LANGUAGE extensions used by modules in this package.
