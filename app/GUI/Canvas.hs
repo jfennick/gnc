@@ -79,7 +79,12 @@ plotTelems (controls, telemetries, canvases) = do
 
 setup :: (Floating a, RealFloat a, Show a) => UIData a -> Types.Config Double -> Window -> UI ()
 setup tvar config window = do
-    tup0 <- liftIO $ readTVarIO tvar
+    -- Wait until the optimizer has written its initial controls, since the
+    -- canvas grid dimensions depend on them.
+    tup0 <- liftIO $ atomically $ do
+        tup <- readTVar tvar
+        let (controls, _, _) = tup
+        if null controls then retry else pure tup
     let (controls_all, telemetries_all, (score, components)) = tup0
 
     return window # set title "I hope u like rockets"

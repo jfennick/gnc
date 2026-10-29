@@ -97,7 +97,7 @@ mainCLI' tvar config = do
 
     let (telemetries0, orbit0, (score0, components0), mass_prop_remaining0) = fn paramsVec0Enabled
     let controls0 = map (subdivideControls dtMax') [ctrls_1 ++ ctrls_1_bb, ctrls_1 ++ ctrls_2]
-    tvar <- newTVarIO (controls0, [], (0.0, replicate (length components0) 0.0))
+    atomically $ writeTVar tvar (controls0, [], (0.0, replicate (length components0) 0.0))
 
     gdAsync <- async $ do
         let paramsVecsEnabled = take 100 $ gradientDescent fn' paramsVec0Enabled
@@ -114,9 +114,7 @@ mainCLI' tvar config = do
             putStrLn $ "orbit " ++ show orbit
             atomically $ writeTVar tvar (controlsSub, telemetries, (score, components))
 
-    -- GUI.Canvas.mainGUI' tvar config)
-    -- wait gdAsync
-    pure ()
+    wait gdAsync
 
 type Results a = (Floating a, RealFloat a) => [[[(Stage a, Telemetry a, Bool)]]]
 
